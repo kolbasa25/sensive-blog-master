@@ -22,9 +22,10 @@ def serialize_post(post):
 
 
 def serialize_tag(tag):
+    posts_count = getattr(tag, 'posts_count', len(Post.objects.filter(tags=tag)))
     return {
         'title': tag.title,
-        'posts_with_tag': len(Post.objects.filter(tags=tag)),
+        'posts_with_tag': posts_count,
     }
 
 
@@ -35,16 +36,16 @@ def index(request):
 
     most_fresh_posts = Post.objects.order_by('-published_at')[:5]
 
-    tags = Tag.objects.all()
-    popular_tags = sorted(tags, key=get_related_posts_count)
-    most_popular_tags = popular_tags[-5:]
+    popular_tags = Tag.objects.annotate(
+        posts_count=models.Count('posts')
+    ).order_by('-posts_count')[:5]
 
     context = {
         'most_popular_posts': [
             serialize_post(post) for post in most_popular_posts
         ],
         'page_posts': [serialize_post(post) for post in most_fresh_posts],
-        'popular_tags': [serialize_tag(tag) for tag in most_popular_tags],
+        'popular_tags': [serialize_tag(tag) for tag in popular_tags],
     }
     return render(request, 'index.html', context)
 
