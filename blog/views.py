@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from blog.models import Comment, Post, Tag
 
 
@@ -55,21 +55,21 @@ def index(request):
 
 
 def post_detail(request, slug):
-    post = (
+    post = get_object_or_404(
         Post.objects
         .with_author_and_tags()
-        .with_likes_count()
-        .get(slug=slug)
+        .with_likes_count(),
+        slug=slug
     )
 
-    comments = Comment.objects.filter(post=post).select_related('author')
+    serialized_comments = post.comments.select_related('author')
     serialized_comments = [
         {
             'text': comment.text,
             'published_at': comment.published_at,
             'author': comment.author.username,
         }
-        for comment in comments
+        for comment in serialized_comments
     ]
 
     serialized_post = {
@@ -93,7 +93,7 @@ def post_detail(request, slug):
 
 
 def tag_filter(request, tag_title):
-    tag = Tag.objects.get(title=tag_title)
+    tag = get_object_or_404(Tag, title=tag_title)
 
     related_posts = (
         tag.posts
