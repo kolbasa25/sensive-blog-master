@@ -1,4 +1,3 @@
-from django.db.models import Count, Prefetch
 from django.shortcuts import render
 from blog.models import Comment, Post, Tag
 
@@ -21,18 +20,15 @@ def serialize_post(post):
         'published_at': post.published_at,
         'slug': post.slug,
         'tags': [serialize_tag(tag) for tag in tags],
-        'first_tag_title': tags[0].title,
+        'first_tag_title': tags.first().title if tags.first() else None,
     }
 
 
 def get_popular_posts_serialized():
     posts = (
         Post.objects.popular()
-        .select_related('author')
-        .prefetch_related(
-            Prefetch('tags', queryset=Tag.objects.popular())
-        )[:5]
-        .fetch_with_comments_count()
+        .with_author_and_tags()
+        .with_comments_count()[:5]
     )
     return [serialize_post(post) for post in posts]
 
@@ -45,11 +41,8 @@ def get_popular_tags_serialized():
 def index(request):
     most_fresh_posts = (
         Post.objects
-        .select_related('author')
-        .prefetch_related(
-            Prefetch('tags', queryset=Tag.objects.popular())
-        )
-        .annotate(comments_count=Count('comments'))
+        .with_author_and_tags()
+        .with_comments_count()
         .order_by('-published_at')[:5]
     )
 
@@ -64,11 +57,8 @@ def index(request):
 def post_detail(request, slug):
     post = (
         Post.objects
-        .select_related('author')
-        .prefetch_related(
-            Prefetch('tags', queryset=Tag.objects.popular())
-        )
-        .annotate(likes_count=Count('likes'))
+        .with_author_and_tags()
+        .with_likes_count()
         .get(slug=slug)
     )
 
@@ -107,12 +97,9 @@ def tag_filter(request, tag_title):
 
     related_posts = (
         tag.posts
-        .select_related('author')
-        .prefetch_related(
-            Prefetch('tags', queryset=Tag.objects.popular())
-        )
-        .annotate(comments_count=Count('comments'))
-    )[:20]
+        .with_author_and_tags()
+        .with_comments_count()[:20]
+    )
 
     context = {
         'tag': tag.title,

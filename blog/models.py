@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from django.db.models import Count, OuterRef, Prefetch, Subquery
 from django.urls import reverse
 
 
@@ -8,25 +9,48 @@ class PostQuerySet(models.QuerySet):
         return self.filter(published_at__year=year)
 
     def popular(self):
-        return self.annotate(
-            likes_count=models.Count('likes')
-        ).order_by('-likes_count')
+        likes_subquery = Subquery(
+            Post.likes.through.objects.filter(post=OuterRef('pk'))
+            .values('post')
+            .annotate(cnt=Count('pk'))
+            .values('cnt')
+        )
+        return self.annotate(likes_count=likes_subquery).order_by('-likes_count')
 
     def fetch_with_comments_count(self):
-        posts = list(self)
-        posts_ids = [post.id for post in posts]
-        posts_with_comments = Post.objects.filter(
-            id__in=posts_ids
-        ).annotate(
-            comments_count=models.Count('comments')
+        return self.annotate(
+            comments_count=Subquery(
+                Comment.objects.filter(post=OuterRef('pk'))
+                .values('post')
+                .annotate(cnt=Count('pk'))
+                .values('cnt')
+            )
         )
-        ids_and_comments = posts_with_comments.values_list(
-            'id', 'comments_count'
+
+    def with_author_and_tags(self):
+        return self.select_related('author').prefetch_related(
+            Prefetch('tags', queryset=Tag.objects.popular())
         )
-        count_for_id = dict(ids_and_comments)
-        for post in posts:
-            post.comments_count = count_for_id.get(post.id, 0)
-        return posts
+
+    def with_comments_count(self):
+        return self.annotate(
+            comments_count=Subquery(
+                Comment.objects.filter(post=OuterRef('pk'))
+                .values('post')
+                .annotate(cnt=Count('pk'))
+                .values('cnt')
+            )
+        )
+
+    def with_likes_count(self):
+        return self.annotate(
+            likes_count=Subquery(
+                Post.likes.through.objects.filter(post=OuterRef('pk'))
+                .values('post')
+                .annotate(cnt=Count('pk'))
+                .values('cnt')
+            )
+        )
 
 
 class Post(models.Model):
